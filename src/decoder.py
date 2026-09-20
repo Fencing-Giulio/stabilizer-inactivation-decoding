@@ -5,7 +5,7 @@ import json
 import os
 import time
 from pathlib import Path
-from typing import Optional, Dict, Tuple, List
+from typing import Optional, Tuple
 from collections import Counter
 
 import numpy as np
@@ -14,7 +14,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from algorithm_sparse import ERASURE, SparseMatrix
+from algorithm_sparse import ERASURE
 from decoder_sparse import SparseDecoder
 
 
@@ -23,8 +23,10 @@ def classify_from_decoder_output(
     Hz_dense: np.ndarray,
     Lz: np.ndarray | None = None,
 ) -> str:
-    """
-    EXACTLY like your old script.
+    """Label a decode as same / degen / logic / nonconv.
+
+    nonconv covers both an unresolved erasure and a residual that is not a
+    valid stabilizer, i.e. the decoder did not return a usable correction.
     """
     corr = out.correction
     orig = out.answer
@@ -57,9 +59,7 @@ def run_once(
     mode: int,
     Lz: Optional[np.ndarray] = None,
 ) -> Tuple[str, int, int]:
-    """
-    same as your old run_once_dense, just decoder-agnostic
-    """
+    """Draw one erasure pattern at the given rate and decode it once."""
     rng = np.random.default_rng(seed)
     n = Hz_dense.shape[1]
 
@@ -91,9 +91,8 @@ def sim(
       results: [(p, counts_dict), ...]
       hist_counts: {p: {"inact_success": {g: c}, "inact_failure": {g: c}, "stab": {g: c}}}
 
-    Key change:
-      We DO NOT store per-run lists anymore.
-      We store additive histogram COUNTS so we can merge across array tasks.
+    Guess counts are stored as additive histograms rather than per-run lists so
+    that the output of many array tasks can be merged (see aggregate_histograms).
     """
     results = []
     hist_counts: dict[float, dict[str, dict[int, int]]] = {}

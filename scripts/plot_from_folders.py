@@ -69,7 +69,7 @@ def mode_curve(agg_for_mode: dict):
     return ps, errs
 
 
-def plot_datasets(datasets, title, logy=True):
+def plot_datasets(datasets, title, out_path, logy=True, show=False):
     fig, ax = plt.subplots(figsize=(10, 6))
 
     linestyles = {
@@ -118,7 +118,17 @@ def plot_datasets(datasets, title, logy=True):
         frameon=True,
     )
 
-    plt.show()
+    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    print(f"Saved plot -> {out_path}")
+    if show:
+        plt.show()
+    plt.close(fig)
+
+
+def discover_folders(base: Path):
+    """All Sum_total_* result folders under base, sorted by name."""
+    return sorted(d.name for d in base.iterdir() if d.is_dir() and d.name.startswith("Sum_total_"))
 
 
 def main():
@@ -131,28 +141,39 @@ def main():
     ap.add_argument(
         "--folders",
         nargs="*",
-        default=[
-            "Sum_total_B1",
-        ],
-        help="Which Sum_total_* folders to include (relative to --base)",
+        default=None,
+        help="Which Sum_total_* folders to include (relative to --base). "
+             "Default: every Sum_total_* folder found under --base.",
     )
+    ap.add_argument("--out", default="decoder_comparison.png",
+                    help="Output PNG path (default: decoder_comparison.png)")
+    ap.add_argument("--show", action="store_true",
+                    help="Also open an interactive window (needs a display)")
     ap.add_argument("--title", default="Decoder Comparison", help="Plot title")
     ap.add_argument("--no-logy", action="store_true", help="Disable log-scale y axis")
     args = ap.parse_args()
 
     base = Path(args.base).expanduser().resolve()
+    names = args.folders if args.folders else discover_folders(base)
+    if not names:
+        raise FileNotFoundError(f"No Sum_total_* folders found under: {base}")
+
     datasets = []
-    for name in args.folders:
+    for name in names:
         folder = base / name
         if not folder.exists():
             raise FileNotFoundError(f"Folder not found: {folder}")
-        label = name.replace("Sum_total_", "")
+        label = name.replace("Sum_total_", "").removesuffix(".npz")
         datasets.append((label, folder))
 
-    plot_datasets(datasets, title=args.title, logy=(not args.no_logy))
+    plot_datasets(
+        datasets,
+        title=args.title,
+        out_path=args.out,
+        logy=(not args.no_logy),
+        show=args.show,
+    )
 
 
 if __name__ == "__main__":
     main()
-
-

@@ -51,11 +51,53 @@ scripts/
 |------|---------|----------------|
 | 1 | Primal peeling only | Peeling |
 | 2 | Inactivation decoding (ML baseline) | Inactivation |
-| 3 | Dual peeling, then primal peeling (ML for surface codes) | Peeling+Stab |
+| 3 | Dual peeling, then primal peeling (ML for surface codes; see the note below) | Peeling+Stab |
 | 4 | Dual peeling, then inactivation (**stabilizer-assisted, ML**) | Stab+Inact |
 | 5 | Alternate dual and primal peeling, then inactivation (no gain over mode 4; see Lemma 1 in the paper) | |
 | 6 | Peeling with hard (random) guessing when stuck | Hard guessing |
 | 7 | Dual peeling, then peeling with hard guessing (not in the paper) | Stab+Hard guessing |
+
+## Code and paper terminology
+
+The code predates the write-up, so some names differ from the paper:
+
+| Paper | Code |
+|-------|------|
+| dual peeling (on `H_X`, guided by the known set) | `algorithm_sparse.structured_decode` |
+| known-degree-1 row elimination (rule 2) | `algorithm_sparse.peel_left_side` |
+| known-column weight-2 elimination (rule 1) | `algorithm_sparse.squeeze_multiweight_left_columns` |
+| fixing a bit covered by a fully erased stabilizer | `algorithm_sparse.sweep_one_pivot` |
+| primal peeling (on `H_Z`) | `algorithm_sparse.hz_peel_only` |
+| inactivation decoding / symbolic guessing | `algorithm_sparse.inactivation_decoding` |
+| Gaussian elimination core | `algorithm_sparse.solve_gf2_random` |
+| number of stabilizer moves | `DecodeResult.stabilizer_guesses` |
+| number of symbolic guesses (inactivations) | `DecodeResult.inactivation_guesses` |
+
+`decoder_sparse.SparseDecoder.decode` assembles these into the modes above;
+`decoder.py` is the Monte Carlo harness around it.
+
+## A note on ML and tie-breaking
+
+Modes 1 and 3 do not guess: they stop when peeling can no longer determine a
+bit uniquely, and the harness records such a run as `nonconv`, counted as a
+failure. Modes 2 and 4 use inactivation, which assigns the remaining free bits
+arbitrarily and therefore always returns a correction.
+
+The two conventions differ only on erasure patterns whose erased set supports a
+logical operator. There the syndrome does not determine the logical class, so a
+non-guessing decoder reports failure while a guessing decoder effectively flips
+a coin and is right half the time. This is the only source of non-convergence
+we observe for mode 3: on the d=13 surface code at p=0.40, mode 3 left erasures
+in 15 runs out of 300, and in all 15 the nullity of `H_Z` restricted to the
+erased set exceeded the number of independent fully erased X-stabilizers by
+exactly one.
+
+For a code with one logical qubit this costs a factor of two in the plotted
+failure rate, with no change in threshold or slope. Across the surface-code data
+in `data/processed/`, the ratio of mode 3 to mode 2 is 2.00 at every erasure
+rate from p=0.22 to p=0.48. To make mode 3 agree with the inactivation-based
+decoders, fix the remaining erased bits at the end to any syndrome-consistent
+value instead of reporting non-convergence.
 
 ## Codes included
 
@@ -87,7 +129,10 @@ python src/decoder.py --npz codes/BB_n72_k12_l6_m6_Ax3_y1_y2_By3_x1_x2.npz \
 python src/plot.py --glob "results/*.json" --out results/threshold_plot.png
 
 # logical failure rate vs erasure rate for the aggregated data in data/processed
-python scripts/plot_from_folders.py --base data/processed
+# (defaults to every code found there; pass --folders for a readable legend)
+python scripts/plot_from_folders.py --base data/processed \
+    --folders Sum_total_Surface11 Sum_total_Surface13 \
+    --title "Surface codes" --out surface_codes.png
 ~~~
 
 On a SLURM cluster, `sbatch scripts/sbatch_stabilizer.sh` (from the repo root)
@@ -105,3 +150,16 @@ runs 200 array tasks with independent seeds. Merge their outputs with
   note      = {arXiv:2601.14236}
 }
 ~~~
+
+## Status
+
+This is research code released as the artifact for the paper, not a maintained
+library. It has not been fully cleaned up: there are unused parameters, some
+duplication between the plotting scripts, and no test suite. The decoder modes
+and the data in `data/processed/` are the parts that were used for the paper.
+
+Simulations are seeded per erasure pattern, but the true error and the choice
+among equally likely solutions use the global NumPy and `random` generators,
+which are not seeded. Individual runs are therefore not bit-for-bit
+reproducible; the published numbers come from millions of runs per point, where
+this does not matter.

@@ -1,3 +1,14 @@
+"""
+Decoder variants ("modes") built on the primitives in algorithm_sparse.
+
+Paper terminology -> code:
+  dual peeling            -> algorithm_sparse.structured_decode
+  primal peeling          -> algorithm_sparse.hz_peel_only
+  inactivation decoding   -> algorithm_sparse.inactivation_decoding
+  stabilizer moves        -> DecodeResult.stabilizer_guesses
+  symbolic guesses        -> DecodeResult.inactivation_guesses
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -14,14 +25,7 @@ from algorithm_sparse import (
     hz_peel_only,
     syndrome,
 )
-from dataclasses import dataclass
-from typing import Optional, Tuple
-import numpy as np
 
-from algorithm_sparse import (
-    INT, ERASURE, SparseMatrix, structured_decode,
-    build_hz_system_and_inactivate, hz_peel_only, syndrome
-)
 
 @dataclass
 class Mode5Stats:
@@ -85,7 +89,10 @@ def adjusted_syndrome_for_known_bits(
 
 
 class SparseDecoder:
-    """Sparse set-based decoder following the dense algorithm exactly."""
+    """Erasure decoder for a CSS code, parameterised by decoding mode.
+
+    See the mode table in the README for what each mode does.
+    """
 
     def __init__(
         self,
@@ -222,7 +229,7 @@ class SparseDecoder:
                 inactivation_guesses=inact_g,
                 mode=mode,
             )
-        
+
         if mode == 6:
             msg_work = msg.copy()
             hard_guesses = 0
@@ -240,7 +247,7 @@ class SparseDecoder:
                         mode=mode,
                     )
 
-                guess_pos = int(er_idxs[0])  
+                guess_pos = int(er_idxs[0])
                 msg_work[guess_pos] = np.random.randint(0, 2, dtype=INT)
                 hard_guesses += 1
 
@@ -265,7 +272,7 @@ class SparseDecoder:
                 inactivation_guesses=inact_g,
                 mode=mode,
             )
-        
+
         if mode == 5:
             iter_msg, stab_used_total, m5 = self._mode5_iterate_structured_then_peel(
                 msg.copy(), s_orig, debug=False, debug_every=1
@@ -290,15 +297,15 @@ class SparseDecoder:
                 mode=mode,
                 mode5_stats=m5,
             )
-        
+
 
         if mode == 7:
             msg_work, stab_used = structured_decode(msg.copy(), self.Hx)
             hard_guesses = 0
-        
+
             while True:
                 msg_work = self._hz_peel_with_adjusted_syndrome(msg_work, s_orig)
-        
+
                 er_idxs = np.flatnonzero(msg_work == ERASURE)
                 if er_idxs.size == 0:
                     return DecodeResult(
@@ -308,7 +315,7 @@ class SparseDecoder:
                         inactivation_guesses=hard_guesses,
                         mode=mode,
                     )
-        
+
                 guess_pos = int(er_idxs[0])
                 msg_work[guess_pos] = np.random.randint(0, 2, dtype=INT)
                 hard_guesses += 1
