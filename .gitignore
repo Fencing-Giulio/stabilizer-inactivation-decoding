@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.virtual_documents/
+.venv/
+.DS_Store
+results/
